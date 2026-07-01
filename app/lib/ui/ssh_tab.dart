@@ -16,7 +16,8 @@ class SshTab extends StatefulWidget {
   State<SshTab> createState() => _SshTabState();
 }
 
-class _SshTabState extends State<SshTab> {
+class _SshTabState extends State<SshTab>
+    with AutomaticKeepAliveClientMixin {
   final _formKey = GlobalKey<FormState>();
   final _host = TextEditingController();
   final _port = TextEditingController(text: '22');
@@ -27,6 +28,10 @@ class _SshTabState extends State<SshTab> {
   ConnectionManager? _manager;
   bool _connecting = false;
   bool _revoking = false;
+
+  // Сохраняем состояние вкладки при переключении на «Локально» и обратно.
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void dispose() {
@@ -93,6 +98,7 @@ class _SshTabState extends State<SshTab> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // требуется для AutomaticKeepAliveClientMixin
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 520),

@@ -13,9 +13,15 @@ class LocalTab extends StatefulWidget {
   State<LocalTab> createState() => _LocalTabState();
 }
 
-class _LocalTabState extends State<LocalTab> {
+class _LocalTabState extends State<LocalTab>
+    with AutomaticKeepAliveClientMixin {
   final _manager = LocalAgentManager();
   bool _busy = false;
+
+  // Сохраняем состояние вкладки при переключении на SSH и обратно, иначе
+  // TabBarView пересоздаёт стейт и сбрасывает активированного агента.
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void dispose() {
@@ -51,6 +57,7 @@ class _LocalTabState extends State<LocalTab> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // требуется для AutomaticKeepAliveClientMixin
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 520),
