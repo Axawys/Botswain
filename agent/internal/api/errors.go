@@ -22,6 +22,15 @@ const (
 	codeMethodNotAllowed = "method_not_allowed"
 	codeInternal         = "internal"
 	codeNotReady         = "not_ready"
+
+	// Коды, относящиеся к ботам (M2).
+	codeBotNotFound        = "bot_not_found"
+	codeBotNameConflict    = "bot_name_conflict"
+	codeInvalidSpec        = "invalid_spec"
+	codeInvalidArchive     = "invalid_archive"
+	codeEntrypointNotFound = "entrypoint_not_found"
+	codeInstallFailed      = "install_failed"
+	codeDockerUnavailable  = "docker_unavailable"
 )
 
 // writeJSON сериализует v в тело ответа с заданным статусом.

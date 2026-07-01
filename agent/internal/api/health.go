@@ -18,11 +18,19 @@ type healthResponse struct {
 
 // healthHandler возвращает состояние агента. Дёшев и без побочных эффектов —
 // рассчитан на health-check при bootstrap и на периодический polling туннеля.
-func (s *Server) healthHandler(w http.ResponseWriter, _ *http.Request) {
+//
+// Начиная с M2 готовность включает доступность Docker: если демон недоступен,
+// агент отвечает 503 not_ready.
+func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
+
+	if s.bots == nil || s.bots.Ping(r.Context()) != nil {
+		writeError(w, http.StatusServiceUnavailable, codeNotReady,
+			"docker daemon is unavailable")
+		return
+	}
+
 	writeJSON(w, http.StatusOK, healthResponse{
-		// В v0 агент всегда готов, как только роутер отвечает. Проверка
-		// критичных зависимостей (docker.sock) появится в следующих milestone'ах.
 		Status:        "ok",
 		Version:       version.Version,
 		Commit:        version.Commit,

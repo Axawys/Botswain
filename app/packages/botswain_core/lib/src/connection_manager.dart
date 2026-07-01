@@ -80,6 +80,10 @@ class ConnectionManager {
   Stream<ConnectionStatus> get statuses => _statusController.stream;
   ConnectionStatus get status => _status;
 
+  /// Клиент control-API для работы с ботами. Доступен после успешного
+  /// [connect] (когда поднят туннель); до этого — `null`.
+  ControlApiClient? get api => _api;
+
   void _emit(ConnectionStatus status) {
     _status = status;
     if (!_statusController.isClosed) _statusController.add(status);

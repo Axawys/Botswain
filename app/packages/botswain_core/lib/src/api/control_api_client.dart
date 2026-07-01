@@ -3,7 +3,9 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../bots/bot_source.dart';
 import '../models/api_error.dart';
+import '../models/bot.dart';
 import '../models/health_status.dart';
 import '../util/backoff.dart';
 
@@ -56,6 +58,68 @@ class ControlApiClient {
       }
       await Future<void>.delayed(delay);
     }
+  }
+
+  // --- Боты (M2) ---
+
+  /// `GET /v0/bots` — список ботов.
+  Future<List<Bot>> listBots() async {
+    final resp = await _http.get(_uri('/bots'));
+    if (resp.statusCode == 200) {
+      final decoded = jsonDecode(resp.body);
+      if (decoded is List) {
+        return decoded
+            .map((e) => Bot.fromJson((e as Map).cast<String, dynamic>()))
+            .toList();
+      }
+      return const [];
+    }
+    throw ApiError.fromJson(_decodeBody(resp), httpStatus: resp.statusCode);
+  }
+
+  /// `GET /v0/bots/{id}` — один бот.
+  Future<Bot> getBot(String id) async {
+    final resp = await _http.get(_uri('/bots/$id'));
+    if (resp.statusCode == 200) return Bot.fromJson(_decodeBody(resp));
+    throw ApiError.fromJson(_decodeBody(resp), httpStatus: resp.statusCode);
+  }
+
+  /// `POST /v0/bots` — создать и запустить бота. Файлы упаковываются в `.tar.gz`
+  /// и отправляются вместе со спеком как multipart.
+  Future<Bot> createBot(BotSpec spec, List<BotSourceFile> files) async {
+    final req = http.MultipartRequest('POST', _uri('/bots'));
+    req.fields['spec'] = jsonEncode(spec.toJson());
+    req.files.add(http.MultipartFile.fromBytes(
+      'code',
+      packBotArchive(files),
+      filename: 'code.tar.gz',
+    ));
+
+    final resp = await http.Response.fromStream(await _http.send(req));
+    if (resp.statusCode == 201) return Bot.fromJson(_decodeBody(resp));
+    throw ApiError.fromJson(_decodeBody(resp), httpStatus: resp.statusCode);
+  }
+
+  /// `POST /v0/bots/{id}/start`.
+  Future<Bot> startBot(String id) => _lifecycle(id, 'start');
+
+  /// `POST /v0/bots/{id}/stop`.
+  Future<Bot> stopBot(String id) => _lifecycle(id, 'stop');
+
+  /// `POST /v0/bots/{id}/restart`.
+  Future<Bot> restartBot(String id) => _lifecycle(id, 'restart');
+
+  Future<Bot> _lifecycle(String id, String action) async {
+    final resp = await _http.post(_uri('/bots/$id/$action'));
+    if (resp.statusCode == 200) return Bot.fromJson(_decodeBody(resp));
+    throw ApiError.fromJson(_decodeBody(resp), httpStatus: resp.statusCode);
+  }
+
+  /// `DELETE /v0/bots/{id}` — удалить контейнер и volume бота.
+  Future<void> deleteBot(String id) async {
+    final resp = await _http.delete(_uri('/bots/$id'));
+    if (resp.statusCode == 204) return;
+    throw ApiError.fromJson(_decodeBody(resp), httpStatus: resp.statusCode);
   }
 
   Uri _uri(String path) => baseUri.replace(path: '$_apiPrefix$path');

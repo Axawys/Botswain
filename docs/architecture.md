@@ -61,12 +61,52 @@ app ─HTTP/WS через SSH-туннель─► agent (127.0.0.1:PORT в ко
   (request-id, recover) и готовность к WebSocket-логам в M3. `echo`/`gin`
   избыточны; чистый `net/http` пришлось бы обвязывать вручную уже в M1.
 - **Боты — соседние контейнеры** с `--restart unless-stopped` и лимитами
-  ресурсов (`--memory`, `--cpus`). (M2.)
+  ресурсов (`--memory`, `--cpus`). (M2, см. «Runtime-модель ботов».)
 - **Секреты** (SSH-пароль/ключ, токены ботов) — только через
   `flutter_secure_storage` (Linux → libsecret). Никогда в конфиге открытым
   текстом.
 - **Устойчивость туннеля.** Сетевой слой клиента переживает разрыв туннеля:
   переподключение с экспоненциальным backoff. Заложено с самого начала.
+
+## Runtime-модель ботов (M2)
+
+Бот — это Docker-контейнер из базового образа `python:3.12-slim`. Отдельного
+образа под каждого бота не собираем: код монтируется volume'ом.
+
+Создание бота (`POST /v0/bots`):
+
+1. Агент создаёт именованный volume `botswain-bot-<id>` (с labels `botswain.*`).
+2. Распаковывает присланный `.tar.gz` в volume (`/app`) через временный
+   installer-контейнер (`CopyToContainer`), попутно проверяя, что `entrypoint`
+   есть в архиве.
+3. Если в архиве есть `requirements.txt` — installer один раз ставит зависимости
+   **в тот же volume**: `pip install --target /app/.deps -r requirements.txt`.
+4. Installer удаляется. Создаётся контейнер бота:
+   - образ `python:3.12-slim`, `workdir /app`, volume смонтирован в `/app`;
+   - `PYTHONPATH=/app/.deps` — зависимости из шага 3 видны;
+   - команда `python <entrypoint>`;
+   - `--restart unless-stopped`, лимиты `--memory` / `--cpus`;
+   - labels с метаданными (см. ниже).
+
+Зачем так: зависимости ставятся один раз, при рестарте сеть не нужна, а падение
+`pip` не уводит бота в crash-loop (установка отделена от запуска).
+
+### Хранение состояния — labels контейнера
+
+Отдельной БД у агента нет. Список ботов и их метаданные восстанавливаются из
+контейнеров по labels:
+
+| Label                      | Значение |
+|----------------------------|----------|
+| `botswain.managed`         | `true` — маркер «этим контейнером рулит Botswain» |
+| `botswain.bot.id`          | короткий id бота |
+| `botswain.bot.name`        | имя бота |
+| `botswain.bot.entrypoint`  | имя python-файла |
+| `botswain.bot.memory_mb`   | лимит памяти (МБ) |
+| `botswain.bot.cpus`        | доля CPU |
+| `botswain.bot.created_at`  | момент создания (RFC3339) |
+
+`GET /v0/bots` = `docker ps -a` с фильтром `label=botswain.managed=true`.
 
 ## Milestone'ы
 

@@ -2,6 +2,7 @@ import 'package:botswain_core/botswain_core.dart';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
+import 'bots_screen.dart';
 import 'connection_status_view.dart';
 
 /// Экран «добавить сервер»: ip/login/password → подключение к агенту.
@@ -158,8 +159,29 @@ class _AddServerScreenState extends State<AddServerScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                if (_manager != null)
+                if (_manager != null) ...[
                   ConnectionStatusView(manager: _manager!),
+                  const SizedBox(height: 12),
+                  // Кнопка управления ботами появляется, когда агент жив.
+                  StreamBuilder<ConnectionStatus>(
+                    stream: _manager!.statuses,
+                    initialData: _manager!.status,
+                    builder: (context, snapshot) {
+                      final healthy =
+                          snapshot.data?.phase == ConnectionPhase.healthy;
+                      if (!healthy) return const SizedBox.shrink();
+                      return FilledButton.tonalIcon(
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => BotsScreen(manager: _manager!),
+                          ),
+                        ),
+                        icon: const Icon(Icons.smart_toy_outlined),
+                        label: const Text('Управление ботами'),
+                      );
+                    },
+                  ),
+                ],
               ],
             ),
           ),

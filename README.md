@@ -14,11 +14,11 @@ Open-source пет-проект.
 ```
 ┌────────────────────┐        SSH (только bootstrap + туннель)
 │  App (Flutter,     │───────────────────────────────────────────┐
-│  Linux desktop)    │                                            │
-│  ┌──────────────┐  │        control-API (HTTP/WS через туннель) │
-│  │ botswain_core│  │◄─────────────────────────────┐            ▼
-│  └──────────────┘  │                               │   ┌─────────────────┐
-└────────────────────┘                               └───│  Agent (Go,     │
+│  Linux desktop)    │                                           │
+│  ┌──────────────┐  │       control-API (HTTP/WS через туннель) │
+│  │ botswain_core│  │◄───────────────────────────────┐          ▼
+│  └──────────────┘  │                                │   ┌─────────────────┐
+└────────────────────┘                                └───│  Agent (Go,     │
                                                           │  в контейнере)  │
                                                           │  docker.sock ─► │
                                                           │  боты-контейнеры│
@@ -55,9 +55,11 @@ Botswain/
 - **App:** Flutter desktop (Linux), `dartssh2` (SSH exec + SFTP + port-forward),
   `flutter_secure_storage` (Linux → libsecret), `fl_chart` (метрики, позже).
 
-## Статус: Milestone 1
+## Статус
 
-Цель M1 — доказать сквозной путь «подключились → агент работает → отвечает».
+### Milestone 1 — готов
+
+Сквозной путь «подключились → агент работает → отвечает».
 
 - [x] Скелет монорепо + контракт control-API v0
 - [x] Agent: health-эндпоинт, биндинг на loopback, Dockerfile
@@ -66,7 +68,18 @@ Botswain/
 - [x] Креды через `flutter_secure_storage`
 - [x] Устойчивость к разрыву туннеля (reconnect с backoff)
 
-Дальнейшие milestone'ы (боты, метрики, egress-прокси, Android) — см.
+### Milestone 2 — готов
+
+Жизненный цикл ботов как соседних Docker-контейнеров.
+
+- [x] Контракт `/v0/bots` (create/list/get/start/stop/restart/delete)
+- [x] Agent: bot-manager на официальном Docker SDK, код бота в per-bot volume,
+      зависимости из `requirements.txt`, лимиты и автоперезапуск; health
+      отражает доступность Docker
+- [x] Состояние ботов — в labels контейнеров (без отдельной БД)
+- [x] App: список ботов и форма создания (выбор `.py` + `requirements.txt`)
+
+Дальнейшие milestone'ы (метрики, стриминг логов, egress-прокси, Android) — см.
 [docs/architecture.md](docs/architecture.md).
 
 ## Сборка

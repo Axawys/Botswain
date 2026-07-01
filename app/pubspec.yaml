@@ -42,6 +42,9 @@ dependencies:
   # Генерация id профилей.
   uuid: ^4.5.1
 
+  # Выбор python-файла и requirements.txt при создании бота.
+  file_picker: ^8.1.4
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

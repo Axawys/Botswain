@@ -19,7 +19,10 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -o /out/agent ./cmd/agent
 
 # --- Стадия рантайма: минимальный образ ---
-FROM gcr.io/distroless/static-debian12:nonroot
+# Не nonroot: агент монтирует /var/run/docker.sock (root:docker) и управляет
+# соседними контейнерами. Доступ к сокету и так root-эквивалентен, поэтому
+# запуск под root здесь оправдан и упрощает доступ к демону.
+FROM gcr.io/distroless/static-debian12:latest
 
 COPY --from=build /out/agent /agent
 

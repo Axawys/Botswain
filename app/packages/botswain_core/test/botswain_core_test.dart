@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:math';
 
+import 'package:archive/archive.dart';
 import 'package:botswain_core/botswain_core.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -86,6 +88,46 @@ void main() {
       final restored = ServerProfile.fromJson(p.toJson());
       expect(restored.host, p.host);
       expect(restored.agentPort, 8080);
+    });
+  });
+
+  group('Bot', () {
+    test('парсит ответ агента', () {
+      final bot = Bot.fromJson({
+        'id': 'abc123',
+        'name': 'echo',
+        'entrypoint': 'main.py',
+        'status': 'running',
+        'limits': {'memory_mb': 128, 'cpus': 0.25},
+        'image': 'python:3.12-slim',
+        'created_at': '2026-07-01T12:00:00Z',
+      });
+      expect(bot.isRunning, isTrue);
+      expect(bot.limits.memoryMb, 128);
+      expect(bot.limits.cpus, 0.25);
+    });
+
+    test('BotSpec без лимитов не кладёт ключ limits', () {
+      const spec = BotSpec(name: 'echo', entrypoint: 'main.py');
+      expect(spec.toJson().containsKey('limits'), isFalse);
+    });
+  });
+
+  group('packBotArchive', () {
+    test('даёт валидный tar.gz с исходными файлами', () {
+      final data = packBotArchive([
+        BotSourceFile(name: 'main.py', bytes: utf8.encode('print(1)')),
+        BotSourceFile(name: 'requirements.txt', bytes: utf8.encode('six')),
+      ]);
+
+      // Распаковываем обратно и проверяем содержимое.
+      final tar = GZipDecoder().decodeBytes(data);
+      final archive = TarDecoder().decodeBytes(tar);
+      final names = archive.files.map((f) => f.name).toSet();
+      expect(names, containsAll(['main.py', 'requirements.txt']));
+
+      final main = archive.files.firstWhere((f) => f.name == 'main.py');
+      expect(utf8.decode(main.content as List<int>), 'print(1)');
     });
   });
 }
