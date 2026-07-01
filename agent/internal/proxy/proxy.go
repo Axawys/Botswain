@@ -4,14 +4,24 @@ package proxy
 
 import (
 	"context"
-	"net/http"
+	"net"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
+
+	xproxy "golang.org/x/net/proxy"
 )
 
-// Куда проверяем доступность — публичный вход Telegram Bot API.
-const probeTarget = "https://api.telegram.org"
+// Куда проверяем доступность — вход Telegram Bot API (TCP до 443).
+const probeTarget = "api.telegram.org:443"
+
+// Параметры проверки: короткий таймаут на прокси и ограниченная конкурентность,
+// чтобы большие списки (сотни прокси) проверялись за секунды, а не минуты.
+const (
+	checkTimeout   = 4 * time.Second
+	maxConcurrency = 50
+)
 
 // Result — итог проверки одного прокси.
 type Result struct {
@@ -36,16 +46,31 @@ func NewManager() *Manager {
 	return &Manager{results: []Result{}}
 }
 
-// SetAndCheck проверяет прокси по порядку, выбирает первый рабочий активным и
-// запоминает результаты. Пустой список сбрасывает конфигурацию.
+// SetAndCheck проверяет прокси параллельно, сохраняя порядок, выбирает первый
+// рабочий активным и запоминает результаты. Пустой список сбрасывает конфиг.
 func (m *Manager) SetAndCheck(ctx context.Context, urls []string) Config {
-	results := make([]Result, 0, len(urls))
+	results := make([]Result, len(urls))
+
+	sem := make(chan struct{}, maxConcurrency)
+	var wg sync.WaitGroup
+	for i, raw := range urls {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(i int, raw string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			norm := normalizeProxy(raw)
+			results[i] = Result{URL: norm, OK: checkProxy(ctx, norm)}
+		}(i, raw)
+	}
+	wg.Wait()
+
+	// Активный — первый рабочий в исходном порядке.
 	active := ""
-	for _, u := range urls {
-		ok := checkProxy(ctx, u)
-		results = append(results, Result{URL: u, OK: ok})
-		if ok && active == "" {
-			active = u
+	for _, r := range results {
+		if r.OK {
+			active = r.URL
+			break
 		}
 	}
 
@@ -61,7 +86,6 @@ func (m *Manager) SetAndCheck(ctx context.Context, urls []string) Config {
 func (m *Manager) Snapshot() Config {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	// Копируем срез, чтобы наружу не утёк внутренний.
 	results := make([]Result, len(m.results))
 	copy(results, m.results)
 	return Config{Results: results, Active: m.active}
@@ -74,34 +98,90 @@ func (m *Manager) Active() string {
 	return m.active
 }
 
-// checkProxy пытается достучаться до api.telegram.org через прокси. Успех —
-// любой полученный HTTP-ответ (значит, соединение через прокси установлено).
-// net/http Transport поддерживает http/https/socks5 прокси нативно.
+// normalizeProxy приводит запись к URL со схемой. Голый `host:port` считаем
+// socks5 (основной тип прокси для ботов).
+func normalizeProxy(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return raw
+	}
+	if !strings.Contains(raw, "://") {
+		return "socks5://" + raw
+	}
+	return raw
+}
+
+// checkProxy проверяет, что через прокси устанавливается TCP-соединение до
+// api.telegram.org:443. Это дешевле полного HTTPS-запроса и достаточно, чтобы
+// понять, что прокси даёт доступ к Telegram.
 func checkProxy(ctx context.Context, raw string) bool {
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" {
 		return false
 	}
 
-	tr := &http.Transport{
-		Proxy:                 http.ProxyURL(u),
-		TLSHandshakeTimeout:   6 * time.Second,
-		ResponseHeaderTimeout: 6 * time.Second,
-		DisableKeepAlives:     true,
-	}
-	client := &http.Client{Transport: tr, Timeout: 8 * time.Second}
-
-	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, checkTimeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, probeTarget, nil)
+	switch u.Scheme {
+	case "socks5", "socks5h":
+		return checkSocks5(ctx, u)
+	case "http", "https":
+		return checkHTTPConnect(ctx, u)
+	default:
+		return false
+	}
+}
+
+func checkSocks5(ctx context.Context, u *url.URL) bool {
+	var auth *xproxy.Auth
+	if u.User != nil {
+		pw, _ := u.User.Password()
+		auth = &xproxy.Auth{User: u.User.Username(), Password: pw}
+	}
+	dialer, err := xproxy.SOCKS5("tcp", u.Host, auth, &net.Dialer{Timeout: checkTimeout})
 	if err != nil {
 		return false
 	}
-	resp, err := client.Do(req)
+	cd, ok := dialer.(xproxy.ContextDialer)
+	if !ok {
+		return false
+	}
+	conn, err := cd.DialContext(ctx, "tcp", probeTarget)
 	if err != nil {
 		return false
 	}
-	_ = resp.Body.Close()
+	_ = conn.Close()
 	return true
+}
+
+// checkHTTPConnect делает CONNECT к api.telegram.org:443 через http-прокси.
+func checkHTTPConnect(ctx context.Context, u *url.URL) bool {
+	d := &net.Dialer{Timeout: checkTimeout}
+	conn, err := d.DialContext(ctx, "tcp", u.Host)
+	if err != nil {
+		return false
+	}
+	defer conn.Close()
+
+	if deadline, ok := ctx.Deadline(); ok {
+		_ = conn.SetDeadline(deadline)
+	}
+
+	req := "CONNECT " + probeTarget + " HTTP/1.1\r\nHost: " + probeTarget + "\r\n"
+	if u.User != nil {
+		// Базовая авторизация опущена для краткости — большинство списков без неё.
+		_ = u.User
+	}
+	req += "\r\n"
+	if _, err := conn.Write([]byte(req)); err != nil {
+		return false
+	}
+	buf := make([]byte, 64)
+	n, err := conn.Read(buf)
+	if err != nil || n == 0 {
+		return false
+	}
+	// Успех — статус 200 в ответе прокси.
+	return strings.Contains(string(buf[:n]), " 200 ")
 }

@@ -156,6 +156,15 @@ void main() {
     });
   });
 
+  group('parseProxyList', () {
+    test('режет по строкам, убирает пустые и комментарии', () {
+      final list = parseProxyList(
+        'socks5://a:1080\n\n  # комментарий\n185.1.2.3:1080\r\n  http://b:8080  \n',
+      );
+      expect(list, ['socks5://a:1080', '185.1.2.3:1080', 'http://b:8080']);
+    });
+  });
+
   group('packBotArchive', () {
     test('даёт валидный tar.gz с исходными файлами', () {
       final data = packBotArchive([

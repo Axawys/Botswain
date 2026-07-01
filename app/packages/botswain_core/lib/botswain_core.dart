@@ -11,6 +11,7 @@ export 'src/models/api_error.dart';
 export 'src/models/bot.dart';
 export 'src/models/bot_metrics.dart';
 export 'src/models/proxy_config.dart';
+export 'src/proxy/proxy_source.dart';
 
 // Боты
 export 'src/bots/bot_source.dart';

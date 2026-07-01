@@ -36,4 +36,10 @@ abstract class SecretsStore {
 
   /// Читает список прокси контекста (пустой, если ничего не сохранено).
   Future<List<String>> readProxies(String contextId);
+
+  /// Сохраняет URL-источник списка прокси (или очищает пустой строкой).
+  Future<void> saveProxySource(String contextId, String url);
+
+  /// Читает URL-источник списка прокси (`null`, если не сохранён).
+  Future<String?> readProxySource(String contextId);
 }

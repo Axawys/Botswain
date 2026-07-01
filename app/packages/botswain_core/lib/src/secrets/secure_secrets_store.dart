@@ -79,6 +79,21 @@ class SecureSecretsStore implements SecretsStore {
     return const [];
   }
 
+  String _proxySourceKey(String contextId) => 'proxy_source.$contextId';
+
+  @override
+  Future<void> saveProxySource(String contextId, String url) {
+    if (url.isEmpty) {
+      return _storage.delete(key: _proxySourceKey(contextId));
+    }
+    return _storage.write(key: _proxySourceKey(contextId), value: url);
+  }
+
+  @override
+  Future<String?> readProxySource(String contextId) {
+    return _storage.read(key: _proxySourceKey(contextId));
+  }
+
   Future<void> _writeOrDelete(String key, String? value) {
     if (value == null || value.isEmpty) {
       return _storage.delete(key: key);

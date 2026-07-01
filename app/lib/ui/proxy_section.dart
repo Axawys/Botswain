@@ -1,10 +1,12 @@
 import 'package:botswain_core/botswain_core.dart';
 import 'package:flutter/material.dart';
 
-/// Секция управления egress-прокси: список полей, проверка и индикаторы.
+/// Секция управления egress-прокси.
 ///
-/// Первый рабочий прокси агент выбирает активным (через него идут новые боты).
-/// Зелёный индикатор — прокси отвечает, красный — нет, серый — ещё не проверяли.
+/// Прокси задаются одним многострочным полем (по одному в строке) — это
+/// выдерживает списки в сотни прокси без подвисаний. Плюс загрузка списка по
+/// URL (обычно raw-txt с GitHub). Результаты проверки показываются отдельным
+/// виртуализированным списком: зелёный — рабочий, красный — нет.
 class ProxySection extends StatefulWidget {
   const ProxySection({
     super.key,
@@ -16,7 +18,7 @@ class ProxySection extends StatefulWidget {
   final ControlApiClient api;
   final SecretsStore secrets;
 
-  /// Ключ хранения списка прокси (`local` или `ssh:<host>`).
+  /// Ключ хранения (`local` или `ssh:<host>`).
   final String contextId;
 
   @override
@@ -24,9 +26,12 @@ class ProxySection extends StatefulWidget {
 }
 
 class _ProxySectionState extends State<ProxySection> {
-  final List<TextEditingController> _controllers = [];
+  final _text = TextEditingController();
+  final _url = TextEditingController();
+
   ProxyConfig? _result;
   bool _checking = false;
+  bool _loading = false;
   String? _error;
 
   @override
@@ -37,104 +42,41 @@ class _ProxySectionState extends State<ProxySection> {
 
   @override
   void dispose() {
-    for (final c in _controllers) {
-      c.dispose();
-    }
+    _text.dispose();
+    _url.dispose();
     super.dispose();
   }
 
   Future<void> _load() async {
     final saved = await widget.secrets.readProxies(widget.contextId);
+    final url = await widget.secrets.readProxySource(widget.contextId);
+    if (!mounted) return;
     setState(() {
-      _controllers
-        ..clear()
-        ..addAll(
-          (saved.isEmpty ? [''] : saved)
-              .map((s) => TextEditingController(text: s)),
-        );
+      _text.text = saved.join('\n');
+      _url.text = url ?? '';
     });
   }
 
-  void _addField() {
-    setState(() => _controllers.add(TextEditingController()));
-  }
+  List<String> _urls() => parseProxyList(_text.text);
 
-  /// Заменяет поля списком url (пустой список оставляет одно пустое поле).
-  void _setUrls(List<String> urls) {
+  Future<void> _loadFromUrl() async {
+    final url = _url.text.trim();
+    if (url.isEmpty) return;
     setState(() {
-      for (final c in _controllers) {
-        c.dispose();
-      }
-      _controllers
-        ..clear()
-        ..addAll(
-          (urls.isEmpty ? [''] : urls)
-              .map((s) => TextEditingController(text: s)),
-        );
+      _loading = true;
+      _error = null;
     });
-  }
-
-  /// Диалог вставки списка: по одному прокси в строке. Результат мержится с
-  /// уже введёнными (без дублей, порядок сохраняется).
-  Future<void> _pasteList() async {
-    final controller = TextEditingController();
-    final text = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Вставить список прокси'),
-        content: SizedBox(
-          width: 440,
-          child: TextField(
-            controller: controller,
-            autofocus: true,
-            minLines: 5,
-            maxLines: 12,
-            decoration: const InputDecoration(
-              hintText: 'По одному прокси в строке:\n'
-                  'socks5://user:pass@host:1080\n'
-                  'http://host:8080',
-              border: OutlineInputBorder(),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Отмена'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('Добавить'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (text == null) return;
-
-    final pasted = text
-        .split(RegExp(r'[\r\n]+'))
-        .map((s) => s.trim())
-        .where((s) => s.isNotEmpty);
-
-    final merged = <String>[];
-    for (final u in [..._urls(), ...pasted]) {
-      if (!merged.contains(u)) merged.add(u);
+    try {
+      final list = await fetchProxyList(url);
+      await widget.secrets.saveProxySource(widget.contextId, url);
+      if (!mounted) return;
+      setState(() => _text.text = list.join('\n'));
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Не удалось загрузить список: $e');
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
-    _setUrls(merged);
   }
-
-  void _removeField(int i) {
-    setState(() {
-      _controllers.removeAt(i).dispose();
-      if (_controllers.isEmpty) _controllers.add(TextEditingController());
-    });
-  }
-
-  List<String> _urls() => _controllers
-      .map((c) => c.text.trim())
-      .where((s) => s.isNotEmpty)
-      .toList();
 
   Future<void> _check() async {
     final urls = _urls();
@@ -167,36 +109,60 @@ class _ProxySectionState extends State<ProxySection> {
             Text('Egress-прокси к Telegram', style: theme.textTheme.titleMedium),
             const SizedBox(height: 4),
             Text(
-              'Боты пойдут через первый рабочий прокси. '
-              'Схемы: http, https, socks5.',
+              'По одному прокси в строке. Голый host:port считается socks5. '
+              'Боты пойдут через первый рабочий.',
               style: theme.textTheme.bodySmall,
             ),
             const SizedBox(height: 12),
-            for (var i = 0; i < _controllers.length; i++) _proxyRow(i),
-            const SizedBox(height: 4),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Wrap(
-                spacing: 8,
-                children: [
-                  TextButton.icon(
-                    onPressed: _addField,
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Добавить прокси'),
+
+            // Загрузка по URL.
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _url,
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      labelText: 'URL списка (raw .txt)',
+                      hintText: 'https://raw.githubusercontent.com/…/proxies.txt',
+                      border: OutlineInputBorder(),
+                    ),
                   ),
-                  TextButton.icon(
-                    onPressed: _pasteList,
-                    icon: const Icon(Icons.content_paste, size: 18),
-                    label: const Text('Вставить списком'),
-                  ),
-                ],
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: _loading ? null : _loadFromUrl,
+                  icon: _loading
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.download),
+                  label: const Text('Загрузить'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Список прокси одним полем.
+            TextField(
+              controller: _text,
+              minLines: 6,
+              maxLines: 14,
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+              decoration: const InputDecoration(
+                hintText: 'socks5://user:pass@host:1080\n185.12.34.56:1080\n…',
+                border: OutlineInputBorder(),
               ),
             ),
+
             if (_error != null) ...[
-              const SizedBox(height: 4),
+              const SizedBox(height: 8),
               Text(_error!, style: const TextStyle(color: Colors.orange)),
             ],
-            const SizedBox(height: 8),
+
+            const SizedBox(height: 12),
             FilledButton.tonalIcon(
               onPressed: _checking ? null : _check,
               icon: _checking
@@ -208,69 +174,70 @@ class _ProxySectionState extends State<ProxySection> {
                   : const Icon(Icons.network_check),
               label: const Text('Проверить прокси'),
             ),
-            if (_result?.active != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Активен: ${_result!.active}',
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: Colors.green),
-              ),
-            ] else if (_result != null && _result!.results.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text('Ни один прокси не отвечает',
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: Colors.orange)),
-            ],
+
+            if (_result != null) _results(context, _result!),
           ],
         ),
       ),
     );
   }
 
-  Widget _proxyRow(int i) {
-    final url = _controllers[i].text.trim();
-    final status = url.isEmpty ? null : _result?.statusFor(url);
-    final isActive = _result?.active != null && _result!.active == url;
+  Widget _results(BuildContext context, ProxyConfig cfg) {
+    final theme = Theme.of(context);
+    final okCount = cfg.results.where((r) => r.ok).length;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          _indicator(status),
-          const SizedBox(width: 8),
-          Expanded(
-            child: TextField(
-              controller: _controllers[i],
-              decoration: InputDecoration(
-                isDense: true,
-                hintText: 'socks5://user:pass@host:1080',
-                border: const OutlineInputBorder(),
-                suffixIcon: isActive
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 12),
+        Text(
+          'Рабочих: $okCount из ${cfg.results.length}',
+          style: theme.textTheme.bodyMedium,
+        ),
+        if (cfg.active != null)
+          Text('Активен: ${cfg.active}',
+              style: theme.textTheme.bodySmall?.copyWith(color: Colors.green))
+        else if (cfg.results.isNotEmpty)
+          Text('Ни один прокси не отвечает',
+              style: theme.textTheme.bodySmall?.copyWith(color: Colors.orange)),
+        const SizedBox(height: 8),
+        // Виртуализированный список — тянет сотни прокси без лагов.
+        Container(
+          constraints: const BoxConstraints(maxHeight: 220),
+          decoration: BoxDecoration(
+            border: Border.all(color: theme.dividerColor),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: cfg.results.length,
+            itemBuilder: (_, i) {
+              final r = cfg.results[i];
+              final isActive = cfg.active == r.url;
+              return ListTile(
+                dense: true,
+                visualDensity: VisualDensity.compact,
+                leading: Icon(
+                  r.ok ? Icons.check_circle : Icons.cancel,
+                  color: r.ok ? Colors.green : Colors.red,
+                  size: 18,
+                ),
+                title: Text(
+                  r.url,
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: isActive
                     ? const Tooltip(
                         message: 'Активный прокси',
                         child: Icon(Icons.bolt, color: Colors.green, size: 18),
                       )
                     : null,
-              ),
-              onChanged: (_) => setState(() {}),
-            ),
+              );
+            },
           ),
-          IconButton(
-            onPressed: () => _removeField(i),
-            icon: const Icon(Icons.remove_circle_outline),
-            tooltip: 'Удалить',
-          ),
-        ],
-      ),
+        ),
+      ],
     );
-  }
-
-  Widget _indicator(bool? status) {
-    final (icon, color) = switch (status) {
-      true => (Icons.check_circle, Colors.green),
-      false => (Icons.cancel, Colors.red),
-      null => (Icons.circle_outlined, Colors.grey),
-    };
-    return Icon(icon, color: color, size: 18);
   }
 }
