@@ -84,6 +84,8 @@ app ─HTTP/WS через SSH-туннель─► agent (127.0.0.1:PORT в ко
 4. Installer удаляется. Создаётся контейнер бота:
    - образ `python:3.12-slim`, `workdir /app`, volume смонтирован в `/app`;
    - `PYTHONPATH=/app/.deps` — зависимости из шага 3 видны;
+   - `PYTHONUNBUFFERED=1` — иначе Python блочно буферизует stdout вне TTY и
+     логи бота не идут в реальном времени;
    - команда `python <entrypoint>`;
    - `--restart unless-stopped`, лимиты `--memory` / `--cpus`;
    - labels с метаданными (см. ниже).

@@ -237,7 +237,8 @@ curl -s http://127.0.0.1:8080/v0/health
   "cpu_percent": 12.5,
   "memory_used_mb": 45.2,
   "memory_limit_mb": 128.0,
-  "memory_percent": 35.3
+  "memory_percent": 35.3,
+  "disk_used_mb": 210.4
 }
 ```
 
@@ -245,6 +246,8 @@ curl -s http://127.0.0.1:8080/v0/health
   больше при нескольких ядрах.
 - `memory_used_mb` / `memory_limit_mb` — использование и лимит памяти в МБ.
 - `memory_percent` — `memory_used_mb / memory_limit_mb * 100`.
+- `disk_used_mb` — место на диске, занятое контейнером бота (rootfs: слои образа
+  + writable-слой), в МБ.
 
 Ошибки: `404 bot_not_found`, `503 docker_unavailable`.
 

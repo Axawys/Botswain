@@ -1,8 +1,9 @@
 import 'dart:async';
 
 import 'package:botswain_core/botswain_core.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+
+import 'half_gauge.dart';
 
 /// Экран одного бота: живые метрики CPU/RAM (снапшоты по опросу) и консоль
 /// логов в реальном времени (WebSocket). Тонкий слой поверх [ControlApiClient].
@@ -16,13 +17,13 @@ class BotDetailScreen extends StatefulWidget {
   State<BotDetailScreen> createState() => _BotDetailScreenState();
 }
 
+enum _LogState { connecting, streaming, failed }
+
 class _BotDetailScreenState extends State<BotDetailScreen> {
-  static const _historyLen = 60;
   static const _logCap = 20000;
   static const _pollInterval = Duration(seconds: 2);
+  static const _logConnectTimeout = Duration(seconds: 8);
 
-  final _cpuHistory = <double>[];
-  final _memHistory = <double>[];
   BotMetrics? _metrics;
   String? _metricsError;
 
@@ -33,6 +34,8 @@ class _BotDetailScreenState extends State<BotDetailScreen> {
   final _logScroll = ScrollController();
   BotLogSession? _logSession;
   StreamSubscription<String>? _logSub;
+  _LogState _logState = _LogState.connecting;
+  String? _logError;
 
   @override
   void initState() {
@@ -64,8 +67,6 @@ class _BotDetailScreenState extends State<BotDetailScreen> {
       setState(() {
         _metrics = m;
         _metricsError = null;
-        _push(_cpuHistory, m.cpuPercent);
-        _push(_memHistory, m.memoryPercent);
       });
     } on ApiError catch (e) {
       if (mounted) setState(() => _metricsError = e.message);
@@ -76,17 +77,36 @@ class _BotDetailScreenState extends State<BotDetailScreen> {
     }
   }
 
-  void _push(List<double> buf, double v) {
-    buf.add(v);
-    if (buf.length > _historyLen) buf.removeAt(0);
-  }
-
-  void _startLogs() {
+  Future<void> _startLogs() async {
     final session = widget.api.connectBotLogs(widget.bot.id);
     _logSession = session;
+
+    // Ждём рукопожатие с таймаутом: иначе при проблеме соединения экран
+    // висел бы на «Подключение…» бесконечно.
+    try {
+      await session.ready.timeout(_logConnectTimeout);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _logState = _LogState.failed;
+          _logError = 'не удалось подключиться к логам: $e';
+        });
+      }
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _logState = _LogState.streaming);
+
     _logSub = session.chunks.listen(
       _appendLog,
-      onError: (_) => _appendLog('\n[поток логов прерван]\n'),
+      onError: (e) {
+        if (mounted) {
+          setState(() {
+            _logState = _LogState.failed;
+            _logError = 'поток логов прерван: $e';
+          });
+        }
+      },
     );
   }
 
@@ -132,6 +152,7 @@ class _BotDetailScreenState extends State<BotDetailScreen> {
 
   Widget _metricsCard(BuildContext context) {
     final m = _metrics;
+    final scheme = Theme.of(context).colorScheme;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -144,16 +165,32 @@ class _BotDetailScreenState extends State<BotDetailScreen> {
             else if (m == null)
               const Text('Сбор метрик…')
             else ...[
-              Text('CPU: ${m.cpuPercent.toStringAsFixed(1)}%'),
-              const SizedBox(height: 4),
-              SizedBox(height: 60, child: _sparkline(context, _cpuHistory)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  HalfCircleGauge(
+                    value: m.cpuPercent / 100,
+                    centerText: '${m.cpuPercent.toStringAsFixed(0)}%',
+                    caption: 'CPU',
+                    color: scheme.primary,
+                  ),
+                  HalfCircleGauge(
+                    value: m.memoryPercent / 100,
+                    centerText: '${m.memoryPercent.toStringAsFixed(0)}%',
+                    caption: 'RAM '
+                        '${m.memoryUsedMb.toStringAsFixed(0)}/'
+                        '${m.memoryLimitMb.toStringAsFixed(0)} МБ',
+                    color: scheme.tertiary,
+                  ),
+                ],
+              ),
               const SizedBox(height: 12),
-              Text('RAM: ${m.memoryUsedMb.toStringAsFixed(1)} / '
-                  '${m.memoryLimitMb.toStringAsFixed(0)} МБ '
-                  '(${m.memoryPercent.toStringAsFixed(1)}%)'),
-              const SizedBox(height: 4),
-              LinearProgressIndicator(
-                value: (m.memoryPercent / 100).clamp(0, 1),
+              Row(
+                children: [
+                  Icon(Icons.storage, size: 18, color: scheme.outline),
+                  const SizedBox(width: 8),
+                  Text('Диск: ${_formatDisk(m.diskUsedMb)}'),
+                ],
               ),
             ],
           ],
@@ -162,38 +199,19 @@ class _BotDetailScreenState extends State<BotDetailScreen> {
     );
   }
 
-  Widget _sparkline(BuildContext context, List<double> data) {
-    if (data.length < 2) {
-      return const Center(child: Text('…'));
-    }
-    final spots = [
-      for (var i = 0; i < data.length; i++) FlSpot(i.toDouble(), data[i]),
-    ];
-    final color = Theme.of(context).colorScheme.primary;
-    return LineChart(
-      LineChartData(
-        minY: 0,
-        titlesData: const FlTitlesData(show: false),
-        gridData: const FlGridData(show: false),
-        borderData: FlBorderData(show: false),
-        lineTouchData: const LineTouchData(enabled: false),
-        lineBarsData: [
-          LineChartBarData(
-            spots: spots,
-            isCurved: true,
-            color: color,
-            dotData: const FlDotData(show: false),
-            belowBarData: BarAreaData(
-              show: true,
-              color: color.withValues(alpha: 0.15),
-            ),
-          ),
-        ],
-      ),
-    );
+  String _formatDisk(double mb) {
+    if (mb >= 1024) return '${(mb / 1024).toStringAsFixed(2)} ГБ';
+    return '${mb.toStringAsFixed(1)} МБ';
   }
 
   Widget _logConsole(BuildContext context) {
+    final placeholder = switch (_logState) {
+      _LogState.connecting => 'Подключение к логам…',
+      _LogState.failed => _logError ?? 'Ошибка подключения к логам',
+      _LogState.streaming => 'Ожидание вывода…',
+    };
+    final showPlaceholder = _log.isEmpty || _logState != _LogState.streaming;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -204,7 +222,7 @@ class _BotDetailScreenState extends State<BotDetailScreen> {
       child: SingleChildScrollView(
         controller: _logScroll,
         child: SelectableText(
-          _log.isEmpty ? 'Ожидание логов…' : _log.toString(),
+          showPlaceholder ? placeholder : _log.toString(),
           style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
         ),
       ),

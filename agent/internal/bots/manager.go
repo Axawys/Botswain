@@ -307,9 +307,11 @@ func (m *Manager) createBotContainer(ctx context.Context, id string, spec Spec, 
 
 	_, err := m.cli.ContainerCreate(ctx,
 		&container.Config{
-			Image:      BaseImage,
-			Cmd:        strslice.StrSlice{"python", spec.Entrypoint},
-			Env:        []string{"PYTHONPATH=" + depsDir},
+			Image: BaseImage,
+			Cmd:   strslice.StrSlice{"python", spec.Entrypoint},
+			// PYTHONUNBUFFERED: без него Python блочно буферизует stdout вне TTY,
+			// и логи бота не появляются в реальном времени (docker logs пуст).
+			Env:        []string{"PYTHONPATH=" + depsDir, "PYTHONUNBUFFERED=1"},
 			WorkingDir: appDir,
 			Labels:     labels,
 		},

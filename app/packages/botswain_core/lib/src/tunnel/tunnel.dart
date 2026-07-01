@@ -126,21 +126,25 @@ class Tunnel {
   }
 
   /// Двунаправленный обмен байтами между локальным сокетом и SSH-каналом.
+  ///
+  /// Используем addStream, а не listen(sink.add): он пробрасывает backpressure
+  /// и корректно паузит/возобновляет поток канала, из-за чего dartssh2 вовремя
+  /// шлёт window-adjust. С listen(add) поток канала не паузится никогда, что
+  /// ломало долгоживущие соединения (WebSocket-логи висли на рукопожатии).
   void _bridge(Socket local, SSHForwardChannel channel) {
-    // local → канал
-    local.listen(
-      channel.sink.add,
-      onDone: () => channel.sink.close(),
-      onError: (_) => channel.sink.close(),
-      cancelOnError: true,
-    );
-    // канал → local
-    channel.stream.listen(
-      local.add,
-      onDone: () => local.destroy(),
-      onError: (_) => local.destroy(),
-      cancelOnError: true,
-    );
+    // addStream, а не listen(sink.add): пробрасывает backpressure, поэтому при
+    // всплеске логов данные не копятся без предела в буфере сокета.
+    channel.sink.addStream(local).whenComplete(() {
+      channel.sink.close().catchError((_) {});
+    }).catchError((_) {
+      channel.sink.close().catchError((_) {});
+    });
+
+    local.addStream(channel.stream).whenComplete(() {
+      local.destroy();
+    }).catchError((_) {
+      local.destroy();
+    });
   }
 
   /// Закрывает туннель: локальный сокет и SSH-сессию. Идемпотентно.

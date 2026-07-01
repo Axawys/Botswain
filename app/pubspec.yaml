@@ -45,9 +45,6 @@ dependencies:
   # Выбор python-файла и requirements.txt при создании бота.
   file_picker: ^8.1.4
 
-  # Графики метрик CPU/RAM.
-  fl_chart: ^0.69.0
-
 dev_dependencies:
   flutter_test:
     sdk: flutter

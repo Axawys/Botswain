@@ -120,9 +120,11 @@ void main() {
         'memory_used_mb': 45.2,
         'memory_limit_mb': 128.0,
         'memory_percent': 35.3,
+        'disk_used_mb': 210.4,
       });
       expect(m.cpuPercent, 12.5);
       expect(m.memoryLimitMb, 128.0);
+      expect(m.diskUsedMb, 210.4);
     });
 
     test('пустой JSON даёт нули, а не падение', () {

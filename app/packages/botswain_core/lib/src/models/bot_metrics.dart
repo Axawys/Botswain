@@ -8,6 +8,7 @@ class BotMetrics {
     required this.memoryUsedMb,
     required this.memoryLimitMb,
     required this.memoryPercent,
+    required this.diskUsedMb,
   });
 
   /// Доля CPU в процентах (100 = одно полное ядро).
@@ -16,10 +17,14 @@ class BotMetrics {
   final double memoryLimitMb;
   final double memoryPercent;
 
+  /// Место на диске, занятое контейнером бота (МБ).
+  final double diskUsedMb;
+
   factory BotMetrics.fromJson(Map<String, dynamic> json) => BotMetrics(
         cpuPercent: (json['cpu_percent'] as num?)?.toDouble() ?? 0,
         memoryUsedMb: (json['memory_used_mb'] as num?)?.toDouble() ?? 0,
         memoryLimitMb: (json['memory_limit_mb'] as num?)?.toDouble() ?? 0,
         memoryPercent: (json['memory_percent'] as num?)?.toDouble() ?? 0,
+        diskUsedMb: (json['disk_used_mb'] as num?)?.toDouble() ?? 0,
       );
 }

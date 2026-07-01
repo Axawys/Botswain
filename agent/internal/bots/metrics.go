@@ -14,6 +14,8 @@ type Metrics struct {
 	MemoryUsedMB  float64 `json:"memory_used_mb"`
 	MemoryLimitMB float64 `json:"memory_limit_mb"`
 	MemoryPercent float64 `json:"memory_percent"`
+	// Место на диске, занятое контейнером бота (rootfs: слои образа + writable).
+	DiskUsedMB float64 `json:"disk_used_mb"`
 }
 
 // dockerStats — минимальная проекция ответа Docker stats, чтобы не зависеть от
@@ -61,15 +63,25 @@ func (m *Manager) Metrics(ctx context.Context, id string) (Metrics, error) {
 		return Metrics{}, err
 	}
 	// Второй сэмпл — с корректным precpu.
-	if err := dec.Decode(&s); err != nil {
-		if err == io.EOF {
-			// Контейнер остановлен: поток мог отдать только один сэмпл.
-			// Возвращаем то, что есть (CPU% выйдет 0).
-			return computeMetrics(s), nil
-		}
+	if err := dec.Decode(&s); err != nil && err != io.EOF {
+		// io.EOF: контейнер остановлен, поток отдал один сэмпл — берём что есть.
 		return Metrics{}, err
 	}
-	return computeMetrics(s), nil
+
+	out := computeMetrics(s)
+	out.DiskUsedMB = m.diskUsedMB(ctx, id)
+	return out, nil
+}
+
+// diskUsedMB считает место, занятое контейнером на диске (rootfs). Ошибку
+// расчёта не считаем фатальной для метрик — тогда вернём 0.
+func (m *Manager) diskUsedMB(ctx context.Context, id string) float64 {
+	const mib = 1024 * 1024
+	info, _, err := m.cli.ContainerInspectWithRaw(ctx, containerName(id), true)
+	if err != nil || info.SizeRootFs == nil {
+		return 0
+	}
+	return float64(*info.SizeRootFs) / mib
 }
 
 // computeMetrics переводит сырые счётчики Docker в проценты и мегабайты.

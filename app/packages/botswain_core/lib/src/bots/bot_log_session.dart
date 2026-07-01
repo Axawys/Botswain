@@ -11,6 +11,10 @@ class BotLogSession {
 
   final WebSocketChannel _channel;
 
+  /// Завершается, когда WebSocket-рукопожатие успешно, либо падает с ошибкой.
+  /// Позволяет UI отличить «подключаюсь» от «не удалось подключиться».
+  Future<void> get ready => _channel.ready;
+
   /// Поток текстовых фрагментов логов. Фрагмент может содержать несколько
   /// строк или часть строки — потребитель просто дописывает его в консоль.
   Stream<String> get chunks => _channel.stream.map((event) {
