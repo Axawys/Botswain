@@ -2,12 +2,15 @@ import 'package:botswain_core/botswain_core.dart';
 import 'package:flutter/material.dart';
 
 import 'bots_screen.dart';
+import 'proxy_section.dart';
 
 /// Вкладка «Локально»: агент поднимается прямо на ПК пользователя, без SSH и
 /// туннеля. Активировать → сразу запускать ботов локально; отозвать — убрать
 /// агента.
 class LocalTab extends StatefulWidget {
-  const LocalTab({super.key});
+  const LocalTab({super.key, required this.secrets});
+
+  final SecretsStore secrets;
 
   @override
   State<LocalTab> createState() => _LocalTabState();
@@ -108,6 +111,12 @@ class _LocalTabState extends State<LocalTab>
                       ),
                       icon: const Icon(Icons.smart_toy_outlined),
                       label: const Text('Управление ботами'),
+                    ),
+                    const SizedBox(height: 16),
+                    ProxySection(
+                      api: _manager.api!,
+                      secrets: widget.secrets,
+                      contextId: 'local',
                     ),
                     const SizedBox(height: 8),
                     OutlinedButton.icon(

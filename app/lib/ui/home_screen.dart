@@ -27,7 +27,7 @@ class HomeScreen extends StatelessWidget {
         ),
         body: TabBarView(
           children: [
-            const LocalTab(),
+            LocalTab(secrets: secrets),
             SshTab(secrets: secrets),
           ],
         ),

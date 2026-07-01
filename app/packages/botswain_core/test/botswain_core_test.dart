@@ -134,6 +134,28 @@ void main() {
     });
   });
 
+  group('ProxyConfig', () {
+    test('парсит результаты и активный прокси', () {
+      final cfg = ProxyConfig.fromJson({
+        'results': [
+          {'url': 'socks5://a', 'ok': true},
+          {'url': 'http://b', 'ok': false},
+        ],
+        'active': 'socks5://a',
+      });
+      expect(cfg.active, 'socks5://a');
+      expect(cfg.statusFor('socks5://a'), isTrue);
+      expect(cfg.statusFor('http://b'), isFalse);
+      expect(cfg.statusFor('http://unknown'), isNull);
+    });
+
+    test('пустой/без активного', () {
+      final cfg = ProxyConfig.fromJson(const {'results': [], 'active': null});
+      expect(cfg.active, isNull);
+      expect(cfg.results, isEmpty);
+    });
+  });
+
   group('packBotArchive', () {
     test('даёт валидный tar.gz с исходными файлами', () {
       final data = packBotArchive([

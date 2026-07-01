@@ -28,4 +28,12 @@ abstract class SecretsStore {
 
   /// Удаляет все секреты профиля.
   Future<void> deleteForProfile(String profileId);
+
+  /// Сохраняет список egress-прокси для контекста ([contextId] — `local` или id
+  /// профиля сервера). Прокси могут содержать логин/пароль, поэтому хранятся в
+  /// защищённом хранилище.
+  Future<void> saveProxies(String contextId, List<String> proxies);
+
+  /// Читает список прокси контекста (пустой, если ничего не сохранено).
+  Future<List<String>> readProxies(String contextId);
 }

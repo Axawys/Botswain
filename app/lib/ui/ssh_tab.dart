@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 
 import 'bots_screen.dart';
 import 'connection_status_view.dart';
+import 'proxy_section.dart';
 
 /// Вкладка «SSH»: ip/login/password → bootstrap агента на VPS → туннель →
 /// health. Плюс отзыв агента. Тонкий слой поверх [ConnectionManager].
@@ -199,6 +200,12 @@ class _SshTabState extends State<SshTab>
                           ),
                           icon: const Icon(Icons.smart_toy_outlined),
                           label: const Text('Управление ботами'),
+                        ),
+                        const SizedBox(height: 16),
+                        ProxySection(
+                          api: _manager!.api!,
+                          secrets: widget.secrets,
+                          contextId: 'ssh:${_host.text.trim()}',
                         ),
                         const SizedBox(height: 8),
                         OutlinedButton.icon(

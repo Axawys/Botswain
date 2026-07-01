@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/axawys/botswain/agent/internal/bots"
+	"github.com/axawys/botswain/agent/internal/proxy"
 )
 
 // Server держит состояние, общее для хендлеров.
@@ -17,7 +18,8 @@ type Server struct {
 	startedAt time.Time
 	// bots может быть nil, если Docker-клиент не удалось инициализировать —
 	// тогда health отдаёт not_ready, а эндпоинты ботов — docker_unavailable.
-	bots *bots.Manager
+	bots    *bots.Manager
+	proxies *proxy.Manager
 }
 
 // NewServer создаёт сервер API. startedAt фиксируется здесь для расчёта uptime.
@@ -26,7 +28,11 @@ func NewServer() *Server {
 	if err != nil {
 		log.Printf("не удалось инициализировать Docker-клиент: %v", err)
 	}
-	return &Server{startedAt: time.Now(), bots: mgr}
+	return &Server{
+		startedAt: time.Now(),
+		bots:      mgr,
+		proxies:   proxy.NewManager(),
+	}
 }
 
 // Handler собирает http.Handler со всеми маршрутами и middleware.
@@ -46,6 +52,9 @@ func (s *Server) Handler() http.Handler {
 	// Все эндпоинты живут под префиксом версии API.
 	r.Route("/v0", func(r chi.Router) {
 		r.Get("/health", s.healthHandler)
+
+		r.Get("/proxies", s.getProxiesHandler)
+		r.Put("/proxies", s.putProxiesHandler)
 
 		r.Route("/bots", func(r chi.Router) {
 			r.Get("/", s.listBotsHandler)

@@ -12,6 +12,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
@@ -26,6 +27,32 @@ import (
 // Manager инкапсулирует работу с Docker-демоном для управления ботами.
 type Manager struct {
 	cli *client.Client
+
+	mu          sync.RWMutex
+	activeProxy string // egress-прокси, пробрасываемый новым ботам
+}
+
+// SetActiveProxy задаёт активный egress-прокси для НОВЫХ ботов (пустая строка —
+// без прокси). Уже созданных ботов нужно пересоздать, чтобы применить.
+func (m *Manager) SetActiveProxy(url string) {
+	m.mu.Lock()
+	m.activeProxy = url
+	m.mu.Unlock()
+}
+
+func (m *Manager) proxyEnv() []string {
+	m.mu.RLock()
+	p := m.activeProxy
+	m.mu.RUnlock()
+	if p == "" {
+		return nil
+	}
+	// И верхний, и нижний регистр — разные HTTP-клиенты смотрят на разные.
+	return []string{
+		"HTTPS_PROXY=" + p, "https_proxy=" + p,
+		"HTTP_PROXY=" + p, "http_proxy=" + p,
+		"ALL_PROXY=" + p, "all_proxy=" + p,
+	}
 }
 
 // NewManager создаёт менеджер, подключаясь к Docker через переменные окружения
@@ -305,13 +332,16 @@ func (m *Manager) createBotContainer(ctx context.Context, id string, spec Spec, 
 		labelCreatedAt:  createdAt,
 	}
 
+	// PYTHONUNBUFFERED: без него Python блочно буферизует stdout вне TTY, и логи
+	// бота не появляются в реальном времени. Плюс egress-прокси, если задан.
+	env := append([]string{"PYTHONPATH=" + depsDir, "PYTHONUNBUFFERED=1"},
+		m.proxyEnv()...)
+
 	_, err := m.cli.ContainerCreate(ctx,
 		&container.Config{
-			Image: BaseImage,
-			Cmd:   strslice.StrSlice{"python", spec.Entrypoint},
-			// PYTHONUNBUFFERED: без него Python блочно буферизует stdout вне TTY,
-			// и логи бота не появляются в реальном времени (docker logs пуст).
-			Env:        []string{"PYTHONPATH=" + depsDir, "PYTHONUNBUFFERED=1"},
+			Image:      BaseImage,
+			Cmd:        strslice.StrSlice{"python", spec.Entrypoint},
+			Env:        env,
 			WorkingDir: appDir,
 			Labels:     labels,
 		},

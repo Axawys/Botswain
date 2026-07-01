@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'secrets_store.dart';
@@ -49,6 +51,32 @@ class SecureSecretsStore implements SecretsStore {
     await _storage.delete(key: _passwordKey(profileId));
     await _storage.delete(key: _privateKeyKey(profileId));
     await _storage.delete(key: _passphraseKey(profileId));
+  }
+
+  String _proxiesKey(String contextId) => 'proxies.$contextId';
+
+  @override
+  Future<void> saveProxies(String contextId, List<String> proxies) {
+    if (proxies.isEmpty) {
+      return _storage.delete(key: _proxiesKey(contextId));
+    }
+    return _storage.write(
+      key: _proxiesKey(contextId),
+      value: jsonEncode(proxies),
+    );
+  }
+
+  @override
+  Future<List<String>> readProxies(String contextId) async {
+    final raw = await _storage.read(key: _proxiesKey(contextId));
+    if (raw == null || raw.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) return decoded.map((e) => '$e').toList();
+    } catch (_) {
+      // повреждённое значение — считаем, что списка нет
+    }
+    return const [];
   }
 
   Future<void> _writeOrDelete(String key, String? value) {

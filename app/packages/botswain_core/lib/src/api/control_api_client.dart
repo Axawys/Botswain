@@ -10,6 +10,7 @@ import '../models/api_error.dart';
 import '../models/bot.dart';
 import '../models/bot_metrics.dart';
 import '../models/health_status.dart';
+import '../models/proxy_config.dart';
 import '../util/backoff.dart';
 
 /// Клиент control-API агента (см. docs/control-api.md).
@@ -139,6 +140,26 @@ class ControlApiClient {
       scheme: baseUri.scheme == 'https' ? 'wss' : 'ws',
     );
     return BotLogSession(WebSocketChannel.connect(wsUri));
+  }
+
+  // --- Прокси (M4) ---
+
+  /// `PUT /v0/proxies` — задать список прокси, проверить и выбрать активный.
+  Future<ProxyConfig> setProxies(List<String> proxies) async {
+    final resp = await _http.put(
+      _uri('/proxies'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'proxies': proxies}),
+    );
+    if (resp.statusCode == 200) return ProxyConfig.fromJson(_decodeBody(resp));
+    throw ApiError.fromJson(_decodeBody(resp), httpStatus: resp.statusCode);
+  }
+
+  /// `GET /v0/proxies` — текущая конфигурация прокси.
+  Future<ProxyConfig> getProxies() async {
+    final resp = await _http.get(_uri('/proxies'));
+    if (resp.statusCode == 200) return ProxyConfig.fromJson(_decodeBody(resp));
+    throw ApiError.fromJson(_decodeBody(resp), httpStatus: resp.statusCode);
   }
 
   Uri _uri(String path) => baseUri.replace(path: '$_apiPrefix$path');
