@@ -36,3 +36,7 @@ export 'src/util/backoff.dart';
 
 // Оркестрация
 export 'src/connection_manager.dart';
+
+// Локальный режим
+export 'src/local/local_docker.dart';
+export 'src/local/local_agent_manager.dart';

@@ -1,7 +1,7 @@
 import 'package:botswain_core/botswain_core.dart';
 import 'package:flutter/material.dart';
 
-import 'ui/add_server_screen.dart';
+import 'ui/home_screen.dart';
 
 void main() {
   runApp(const BotswainApp());
@@ -32,7 +32,7 @@ class BotswainApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: AddServerScreen(secrets: secrets),
+      home: HomeScreen(secrets: secrets),
     );
   }
 }

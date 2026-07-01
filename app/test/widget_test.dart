@@ -1,18 +1,19 @@
-// Дымовой тест UI: экран «добавить сервер» рендерится и содержит поля формы.
+// Дымовой тест UI: главный экран рендерится с двумя вкладками.
 
 import 'package:botswain/main.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('экран подключения рендерится с полями формы', (tester) async {
+  testWidgets('главный экран показывает вкладки Локально и SSH',
+      (tester) async {
     await tester.pumpWidget(const BotswainApp());
 
-    expect(find.text('IP или хост'), findsOneWidget);
-    expect(find.text('Логин SSH'), findsOneWidget);
-    expect(find.text('Пароль SSH'), findsOneWidget);
+    expect(find.text('Локально'), findsOneWidget);
+    expect(find.text('SSH'), findsOneWidget);
+    // Локальная вкладка активна по умолчанию.
     expect(
-      find.widgetWithText(FilledButton, 'Подключиться и поднять агента'),
+      find.widgetWithText(FilledButton, 'Активировать агента локально'),
       findsOneWidget,
     );
   });

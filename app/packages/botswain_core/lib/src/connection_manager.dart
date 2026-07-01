@@ -177,6 +177,23 @@ class ConnectionManager {
     }
   }
 
+  /// Отзывает агента на сервере (удаляет его контейнер) и закрывает
+  /// подключение. После вызова менеджер использовать нельзя.
+  Future<void> revokeAgent() async {
+    final creds = await _secrets.readSshCredentials(profile.id);
+    if (creds == null) {
+      throw StateError('нет учётных данных');
+    }
+    // Туннель может быть уже недоступен — идём отдельной SSH-сессией.
+    final ssh = await SshConnection.connect(profile, creds);
+    try {
+      await ServerBootstrap(ssh).removeAgent();
+    } finally {
+      await ssh.close();
+    }
+    await dispose();
+  }
+
   /// Разовый опрос health (для кнопки «проверить» в UI).
   Future<HealthStatus> checkHealthOnce() {
     final api = _api;

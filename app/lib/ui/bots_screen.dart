@@ -4,13 +4,14 @@ import 'package:flutter/material.dart';
 import 'bot_detail_screen.dart';
 import 'create_bot_dialog.dart';
 
-/// Экран списка ботов на сервере: создание, запуск/остановка/перезапуск, удаление.
+/// Экран списка ботов: создание, запуск/остановка/перезапуск, удаление.
 ///
-/// Тонкий слой поверх [ConnectionManager.api] из botswain_core.
+/// Работает поверх [ControlApiClient] — одинаково для локального агента и для
+/// агента на VPS через туннель.
 class BotsScreen extends StatefulWidget {
-  const BotsScreen({super.key, required this.manager});
+  const BotsScreen({super.key, required this.api});
 
-  final ConnectionManager manager;
+  final ControlApiClient api;
 
   @override
   State<BotsScreen> createState() => _BotsScreenState();
@@ -21,7 +22,7 @@ class _BotsScreenState extends State<BotsScreen> {
   bool _loading = false;
   String? _error;
 
-  ControlApiClient get _api => widget.manager.api!;
+  ControlApiClient get _api => widget.api;
 
   @override
   void initState() {

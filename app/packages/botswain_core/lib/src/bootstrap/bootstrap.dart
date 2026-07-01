@@ -71,4 +71,10 @@ class ServerBootstrap {
       throw StateError('не удалось запустить агента: ${res.stderr.trim()}');
     }
   }
+
+  /// Отзывает агента на сервере: удаляет его контейнер. Боты (соседние
+  /// контейнеры) не трогаются.
+  Future<void> removeAgent() async {
+    await _ssh.run('docker rm -f $kAgentContainerName');
+  }
 }
