@@ -10,9 +10,54 @@
 struct _MyApplication {
   GtkApplication parent_instance;
   char** dart_entrypoint_arguments;
+  // Настройки рабочего стола (для отслеживания светлой/тёмной схемы).
+  // Может быть nullptr, если схема GSettings недоступна (не-GNOME окружение).
+  GSettings* interface_settings;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
+
+// Читает системное предпочтение тёмной темы из org.gnome.desktop.interface.
+static gboolean read_prefer_dark(GSettings* settings) {
+  if (settings == nullptr) {
+    return FALSE;
+  }
+  g_autofree gchar* scheme = g_settings_get_string(settings, "color-scheme");
+  return g_strcmp0(scheme, "prefer-dark") == 0;
+}
+
+// Применяет системную схему к GTK: рамка окна (header bar) следует за темой.
+// GTK3 не переключается в тёмную сам по себе — нужно явно выставить флаг.
+static void apply_color_scheme(GSettings* settings) {
+  gboolean dark = read_prefer_dark(settings);
+  GtkSettings* gtk_settings = gtk_settings_get_default();
+  if (gtk_settings != nullptr) {
+    g_object_set(gtk_settings, "gtk-application-prefer-dark-theme", dark,
+                 nullptr);
+  }
+}
+
+// Живое обновление при переключении светлой/тёмной темы в системе.
+static void color_scheme_changed_cb(GSettings* settings, gchar* key,
+                                    gpointer user_data) {
+  apply_color_scheme(settings);
+}
+
+// Создаёт GSettings для схемы рабочего стола, только если схема установлена,
+// иначе возвращает nullptr (без падения на окружениях без GNOME-схем).
+static GSettings* create_interface_settings() {
+  GSettingsSchemaSource* source = g_settings_schema_source_get_default();
+  if (source == nullptr) {
+    return nullptr;
+  }
+  g_autoptr(GSettingsSchema) schema = g_settings_schema_source_lookup(
+      source, "org.gnome.desktop.interface", TRUE);
+  if (schema == nullptr ||
+      !g_settings_schema_has_key(schema, "color-scheme")) {
+    return nullptr;
+  }
+  return g_settings_new("org.gnome.desktop.interface");
+}
 
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
@@ -22,6 +67,16 @@ static void first_frame_cb(MyApplication* self, FlView* view) {
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
+
+  // Подхватываем системную схему (светлая/тёмная) до создания виджетов, чтобы
+  // рамка окна сразу отрисовалась в нужной теме, и следим за её изменением.
+  self->interface_settings = create_interface_settings();
+  if (self->interface_settings != nullptr) {
+    apply_color_scheme(self->interface_settings);
+    g_signal_connect(self->interface_settings, "changed::color-scheme",
+                     G_CALLBACK(color_scheme_changed_cb), nullptr);
+  }
+
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
 
@@ -60,9 +115,10 @@ static void my_application_activate(GApplication* application) {
 
   FlView* view = fl_view_new(project);
   GdkRGBA background_color;
-  // Background defaults to black, override it here if necessary, e.g. #00000000
-  // for transparent.
-  gdk_rgba_parse(&background_color, "#000000");
+  // Фон под тему: тёмный в тёмной схеме, светлый в светлой — иначе при старте
+  // и ресайзе мелькал бы чёрный прямоугольник поверх светлого UI.
+  gboolean dark = read_prefer_dark(self->interface_settings);
+  gdk_rgba_parse(&background_color, dark ? "#000000" : "#ffffff");
   fl_view_set_background_color(view, &background_color);
   gtk_widget_show(GTK_WIDGET(view));
   gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));
@@ -121,6 +177,7 @@ static void my_application_shutdown(GApplication* application) {
 static void my_application_dispose(GObject* object) {
   MyApplication* self = MY_APPLICATION(object);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
+  g_clear_object(&self->interface_settings);
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);
 }
 
