@@ -59,6 +59,71 @@ class _ProxySectionState extends State<ProxySection> {
     setState(() => _controllers.add(TextEditingController()));
   }
 
+  /// Заменяет поля списком url (пустой список оставляет одно пустое поле).
+  void _setUrls(List<String> urls) {
+    setState(() {
+      for (final c in _controllers) {
+        c.dispose();
+      }
+      _controllers
+        ..clear()
+        ..addAll(
+          (urls.isEmpty ? [''] : urls)
+              .map((s) => TextEditingController(text: s)),
+        );
+    });
+  }
+
+  /// Диалог вставки списка: по одному прокси в строке. Результат мержится с
+  /// уже введёнными (без дублей, порядок сохраняется).
+  Future<void> _pasteList() async {
+    final controller = TextEditingController();
+    final text = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Вставить список прокси'),
+        content: SizedBox(
+          width: 440,
+          child: TextField(
+            controller: controller,
+            autofocus: true,
+            minLines: 5,
+            maxLines: 12,
+            decoration: const InputDecoration(
+              hintText: 'По одному прокси в строке:\n'
+                  'socks5://user:pass@host:1080\n'
+                  'http://host:8080',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: const Text('Добавить'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (text == null) return;
+
+    final pasted = text
+        .split(RegExp(r'[\r\n]+'))
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty);
+
+    final merged = <String>[];
+    for (final u in [..._urls(), ...pasted]) {
+      if (!merged.contains(u)) merged.add(u);
+    }
+    _setUrls(merged);
+  }
+
   void _removeField(int i) {
     setState(() {
       _controllers.removeAt(i).dispose();
@@ -111,10 +176,20 @@ class _ProxySectionState extends State<ProxySection> {
             const SizedBox(height: 4),
             Align(
               alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: _addField,
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('Добавить прокси'),
+              child: Wrap(
+                spacing: 8,
+                children: [
+                  TextButton.icon(
+                    onPressed: _addField,
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Добавить прокси'),
+                  ),
+                  TextButton.icon(
+                    onPressed: _pasteList,
+                    icon: const Icon(Icons.content_paste, size: 18),
+                    label: const Text('Вставить списком'),
+                  ),
+                ],
               ),
             ),
             if (_error != null) ...[
