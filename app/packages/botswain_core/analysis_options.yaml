@@ -1,0 +1,12 @@
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    # Отключено намеренно: у нас публичные именованные параметры конструктора
+    # присваиваются приватным полям (dependency injection). Dart запрещает
+    # именованные параметры с подчёркиванием, поэтому предлагаемый линтером
+    # initializing formal (this._field) для таких случаев неприменим.
+    prefer_initializing_formals: false
+
+# Additional information about this file can be found at
+# https://dart.dev/guides/language/analysis-options

@@ -1,0 +1,25 @@
+# --- Go (agent) ---
+/agent/bin/
+/agent/agent
+*.exe
+*.test
+*.out
+vendor/
+
+# --- Flutter / Dart (app) ---
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+pubspec.lock
+**/doc/api/
+.pub-cache/
+.pub/
+
+# --- IDE / OS ---
+.idea/
+.vscode/
+*.iml
+.DS_Store
+*.swp

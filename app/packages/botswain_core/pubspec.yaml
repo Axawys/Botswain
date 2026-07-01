@@ -1,0 +1,28 @@
+name: botswain_core
+description: "Ядро клиента Botswain — SSH, туннель, control-API клиент, секреты, модели. Без UI."
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.12.0
+  flutter: ">=3.24.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # SSH exec + SFTP + port-forward для bootstrap и туннеля.
+  dartssh2: ^2.12.0
+  # HTTP-клиент control-API.
+  http: ^1.2.0
+  # Хранение секретов (Linux → libsecret).
+  # 10.x: переписанный Linux-плагин без встроенного json.hpp, собирается
+  # свежим clang (на 9.x падала линковка из-за -Werror в вендоренном json).
+  flutter_secure_storage: ^10.3.1
+  meta: ^1.15.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
