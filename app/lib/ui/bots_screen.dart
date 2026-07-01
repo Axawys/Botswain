@@ -1,6 +1,7 @@
 import 'package:botswain_core/botswain_core.dart';
 import 'package:flutter/material.dart';
 
+import 'bot_detail_screen.dart';
 import 'create_bot_dialog.dart';
 
 /// Экран списка ботов на сервере: создание, запуск/остановка/перезапуск, удаление.
@@ -122,6 +123,11 @@ class _BotsScreenState extends State<BotsScreen> {
         separatorBuilder: (_, _) => const Divider(height: 1),
         itemBuilder: (_, i) => _BotTile(
           bot: bots[i],
+          onOpen: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => BotDetailScreen(api: _api, bot: bots[i]),
+            ),
+          ),
           onStart: () => _run(() => _api.startBot(bots[i].id)),
           onStop: () => _run(() => _api.stopBot(bots[i].id)),
           onRestart: () => _run(() => _api.restartBot(bots[i].id)),
@@ -135,6 +141,7 @@ class _BotsScreenState extends State<BotsScreen> {
 class _BotTile extends StatelessWidget {
   const _BotTile({
     required this.bot,
+    required this.onOpen,
     required this.onStart,
     required this.onStop,
     required this.onRestart,
@@ -142,6 +149,7 @@ class _BotTile extends StatelessWidget {
   });
 
   final Bot bot;
+  final VoidCallback onOpen;
   final VoidCallback onStart;
   final VoidCallback onStop;
   final VoidCallback onRestart;
@@ -150,6 +158,7 @@ class _BotTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTile(
+      onTap: onOpen,
       leading: _statusDot(bot.status),
       title: Text(bot.name),
       subtitle: Text(

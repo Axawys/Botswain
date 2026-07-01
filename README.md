@@ -79,7 +79,18 @@ Botswain/
 - [x] Состояние ботов — в labels контейнеров (без отдельной БД)
 - [x] App: список ботов и форма создания (выбор `.py` + `requirements.txt`)
 
-Дальнейшие milestone'ы (метрики, стриминг логов, egress-прокси, Android) — см.
+### Milestone 3 — готов
+
+Наблюдаемость ботов: метрики и логи.
+
+- [x] Контракт: `GET /v0/bots/{id}/metrics` (снапшот CPU/RAM) и
+      `GET /v0/bots/{id}/logs` (WebSocket)
+- [x] Agent: метрики через Docker stats (CPU% по двум замерам), стриминг логов
+      по WebSocket (`coder/websocket` + демультиплексирование `stdcopy`)
+- [x] App: экран бота — живые метрики (`fl_chart`) и консоль логов в реальном
+      времени
+
+Дальнейшие milestone'ы (egress-прокси к `api.telegram.org`, Android) — см.
 [docs/architecture.md](docs/architecture.md).
 
 ## Сборка

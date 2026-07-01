@@ -56,6 +56,8 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/start", s.startBotHandler)
 				r.Post("/stop", s.stopBotHandler)
 				r.Post("/restart", s.restartBotHandler)
+				r.Get("/metrics", s.botMetricsHandler)
+				r.Get("/logs", s.botLogsHandler)
 			})
 		})
 	})

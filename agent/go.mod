@@ -4,6 +4,8 @@ go 1.26
 
 require github.com/go-chi/chi/v5 v5.2.1
 
+require github.com/coder/websocket v1.8.15
+
 require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect

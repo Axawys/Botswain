@@ -2,10 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:web_socket_channel/web_socket_channel.dart';
 
+import '../bots/bot_log_session.dart';
 import '../bots/bot_source.dart';
 import '../models/api_error.dart';
 import '../models/bot.dart';
+import '../models/bot_metrics.dart';
 import '../models/health_status.dart';
 import '../util/backoff.dart';
 
@@ -120,6 +123,22 @@ class ControlApiClient {
     final resp = await _http.delete(_uri('/bots/$id'));
     if (resp.statusCode == 204) return;
     throw ApiError.fromJson(_decodeBody(resp), httpStatus: resp.statusCode);
+  }
+
+  /// `GET /v0/bots/{id}/metrics` — снапшот CPU/RAM.
+  Future<BotMetrics> getBotMetrics(String id) async {
+    final resp = await _http.get(_uri('/bots/$id/metrics'));
+    if (resp.statusCode == 200) return BotMetrics.fromJson(_decodeBody(resp));
+    throw ApiError.fromJson(_decodeBody(resp), httpStatus: resp.statusCode);
+  }
+
+  /// Открывает WebSocket-сессию логов бота (`GET /v0/bots/{id}/logs`).
+  /// Схема заменяется на ws/wss поверх того же адреса туннеля.
+  BotLogSession connectBotLogs(String id) {
+    final wsUri = _uri('/bots/$id/logs').replace(
+      scheme: baseUri.scheme == 'https' ? 'wss' : 'ws',
+    );
+    return BotLogSession(WebSocketChannel.connect(wsUri));
   }
 
   Uri _uri(String path) => baseUri.replace(path: '$_apiPrefix$path');

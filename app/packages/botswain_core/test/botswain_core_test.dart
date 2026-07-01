@@ -113,6 +113,25 @@ void main() {
     });
   });
 
+  group('BotMetrics', () {
+    test('парсит снапшот метрик', () {
+      final m = BotMetrics.fromJson({
+        'cpu_percent': 12.5,
+        'memory_used_mb': 45.2,
+        'memory_limit_mb': 128.0,
+        'memory_percent': 35.3,
+      });
+      expect(m.cpuPercent, 12.5);
+      expect(m.memoryLimitMb, 128.0);
+    });
+
+    test('пустой JSON даёт нули, а не падение', () {
+      final m = BotMetrics.fromJson(const {});
+      expect(m.cpuPercent, 0);
+      expect(m.memoryPercent, 0);
+    });
+  });
+
   group('packBotArchive', () {
     test('даёт валидный tar.gz с исходными файлами', () {
       final data = packBotArchive([

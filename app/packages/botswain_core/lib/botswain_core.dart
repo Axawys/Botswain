@@ -9,9 +9,11 @@ export 'src/models/server_profile.dart';
 export 'src/models/health_status.dart';
 export 'src/models/api_error.dart';
 export 'src/models/bot.dart';
+export 'src/models/bot_metrics.dart';
 
 // Боты
 export 'src/bots/bot_source.dart';
+export 'src/bots/bot_log_session.dart';
 
 // Секреты
 export 'src/secrets/secrets_store.dart';
